@@ -1,0 +1,33 @@
+name: "Auto-Context: Main Branch Update"
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: auto-context-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-context:
+    runs-on: ubuntu-latest
+    if: >-
+      github.actor != 'github-actions[bot]'
+      && !contains(github.event.head_commit.message, '[auto-context]')
+      && github.event.head_commit.committer.username != 'web-flow'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: Neon-Data/auto-context@beta
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # main-mode: pr             # default — opens a PR with proposed changes
+          # main-mode: direct-commit  # commits directly to main
+          # debug: true               # show full Claude output in action logs

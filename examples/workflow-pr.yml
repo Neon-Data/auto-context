@@ -1,0 +1,31 @@
+name: "Auto-Context: PR Update"
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+concurrency:
+  group: auto-context-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-context:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - uses: Neon-Data/auto-context@beta
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # pr-mode: comment        # default — posts a comment with a link to create a PR
+          # pr-mode: auto-pr        # creates a PR targeting the current PR branch
+          # pr-mode: auto-commit    # commits directly to the PR branch
+          # debug: true             # show full Claude output in action logs

@@ -1,0 +1,337 @@
+name: "Auto-Context"
+description: "Automatically keep AI-agent context files (CLAUDE.md, AGENT.md, etc.) in sync with your codebase"
+author: "Istvan Mezo - Neon Data"
+
+branding:
+  icon: "refresh-cw"
+  color: "purple"
+
+inputs:
+  anthropic-api-key:
+    description: "Anthropic API key"
+    required: true
+  github-token:
+    description: "GitHub token for PR comments and creating PRs"
+    required: false
+    default: ${{ github.token }}
+  model:
+    description: "Claude model to use"
+    required: false
+    default: "claude-opus-4-6"
+  context-files:
+    description: "Comma-separated context file names/globs to maintain. When empty, Claude discovers them automatically."
+    required: false
+    default: ""
+  pr-mode:
+    description: "How to apply changes on PRs: comment, auto-pr, or auto-commit"
+    required: false
+    default: "comment"
+  main-mode:
+    description: "How to apply changes on main branch pushes: pr or direct-commit"
+    required: false
+    default: "pr"
+  init:
+    description: "Create a minimal CLAUDE.md if no context files exist yet"
+    required: false
+    default: "true"
+  debug:
+    description: "Enable debug mode (shows full Claude output in action logs)"
+    required: false
+    default: "false"
+
+outputs:
+  context-updated:
+    description: "Whether context files were changed (true/false)"
+    value: ${{ steps.check-changes.outputs.context-updated }}
+  pr-url:
+    description: "URL of created PR (when applicable)"
+    value: ${{ steps.apply.outputs.pr-url }}
+
+runs:
+  using: "composite"
+  steps:
+    # ── Step 1: Detect trigger context ──
+    - id: detect
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        MAIN="${{ github.event.repository.default_branch }}"
+        if [ -z "$MAIN" ]; then
+          MAIN="main"
+        fi
+
+        EVENT="${{ github.event_name }}"
+
+        if [ "$EVENT" = "pull_request" ] || [ "$EVENT" = "pull_request_target" ]; then
+          TRIGGER="pr"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          HEAD_BRANCH="${{ github.head_ref }}"
+          BEFORE_SHA=""
+        elif [ "$EVENT" = "push" ]; then
+          TRIGGER="main"
+          PR_NUMBER=""
+          HEAD_BRANCH=""
+          BEFORE_SHA="${{ github.event.before }}"
+          if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE_SHA=$(git rev-parse HEAD~1 2>/dev/null || git rev-list --max-parents=0 HEAD | head -1)
+          fi
+        else
+          echo "::error::auto-context: unsupported event '${EVENT}'. Use pull_request or push."
+          exit 1
+        fi
+
+        echo "trigger=${TRIGGER}" >> "$GITHUB_OUTPUT"
+        echo "main-branch=${MAIN}" >> "$GITHUB_OUTPUT"
+        echo "pr-number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+        echo "head-branch=${HEAD_BRANCH}" >> "$GITHUB_OUTPUT"
+        echo "before-sha=${BEFORE_SHA}" >> "$GITHUB_OUTPUT"
+
+        echo "::notice::auto-context: trigger=${TRIGGER} main=${MAIN} pr=${PR_NUMBER} head=${HEAD_BRANCH}"
+
+    # ── Step 2: Loop prevention ──
+    - id: should-run
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+
+        TRIGGER="${{ steps.detect.outputs.trigger }}"
+
+        if [ "$TRIGGER" = "main" ]; then
+          COMMIT_MSG=$(git log -1 --format=%s HEAD 2>/dev/null || echo "")
+          if echo "$COMMIT_MSG" | grep -qF '[auto-context]'; then
+            echo "::notice::auto-context: skipping — commit contains [auto-context]"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+        fi
+
+        if [ "$TRIGGER" = "pr" ]; then
+          PR_NUMBER="${{ steps.detect.outputs.pr-number }}"
+          if [ -n "$PR_NUMBER" ]; then
+            LABELS=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' 2>/dev/null || echo "")
+            if echo "$LABELS" | grep -qxF 'auto-context'; then
+              echo "::notice::auto-context: skipping — PR has auto-context label"
+              echo "run=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+        fi
+
+        echo "run=true" >> "$GITHUB_OUTPUT"
+
+    # ── Step 3: Gather diff context and build prompt ──
+    - id: gather
+      if: steps.should-run.outputs.run == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        TRIGGER="${{ steps.detect.outputs.trigger }}"
+        MAIN="${{ steps.detect.outputs.main-branch }}"
+        CURRENT_COMMIT=$(git rev-parse HEAD)
+
+        if [ "$TRIGGER" = "pr" ]; then
+          MERGE_BASE=$(git merge-base HEAD "origin/${MAIN}" 2>/dev/null || echo "")
+          if [ -z "$MERGE_BASE" ]; then
+            MERGE_BASE=$(git rev-list --max-parents=0 HEAD | head -1)
+          fi
+          DIFF_RANGE="${MERGE_BASE}..HEAD"
+        else
+          BEFORE_SHA="${{ steps.detect.outputs.before-sha }}"
+          DIFF_RANGE="${BEFORE_SHA}..HEAD"
+        fi
+
+        CHANGED_FILES=$(git diff --name-only "$DIFF_RANGE" 2>/dev/null || echo "No changes detected")
+
+        CONTEXT_FILES_INPUT="${{ inputs.context-files }}"
+        if [ -n "$CONTEXT_FILES_INPUT" ]; then
+          CONTEXT_FILES_LIST="$CONTEXT_FILES_INPUT"
+        else
+          CONTEXT_FILES_LIST="(auto-discover)"
+        fi
+
+        export CONTEXT_FILES_LIST DIFF_RANGE CHANGED_FILES MAIN_BRANCH="$MAIN" CURRENT_COMMIT INIT_MODE="${{ inputs.init }}"
+        ENVSUBST_VARS='${CONTEXT_FILES_LIST} ${DIFF_RANGE} ${CHANGED_FILES} ${MAIN_BRANCH} ${CURRENT_COMMIT} ${INIT_MODE}'
+
+        PROMPT_TEMPLATE="${{ github.action_path }}/prompts/update-context.md"
+        FINAL_PROMPT=$(envsubst "$ENVSUBST_VARS" < "$PROMPT_TEMPLATE")
+
+        {
+          echo 'prompt<<PROMPT_DELIM_EOF'
+          echo "$FINAL_PROMPT"
+          echo 'PROMPT_DELIM_EOF'
+        } >> "$GITHUB_OUTPUT"
+
+        echo "::group::auto-context prompt preview"
+        echo "$FINAL_PROMPT" | head -30
+        echo "... (truncated)"
+        echo "::endgroup::"
+
+    # ── Step 4: Run Claude via claude-code-action ──
+    - id: run-claude
+      if: steps.should-run.outputs.run == 'true'
+      uses: anthropics/claude-code-action@v1
+      with:
+        anthropic_api_key: ${{ inputs.anthropic-api-key }}
+        github_token: ${{ inputs.github-token }}
+        prompt: ${{ steps.gather.outputs.prompt }}
+        show_full_output: ${{ inputs.debug == 'true' }}
+        claude_args: >-
+          --model ${{ inputs.model }}
+          --max-turns 25
+          --allowedTools "Bash(git diff*),Bash(git log*),Bash(git show*),Bash(git ls-files*),Bash(git blame*)"
+
+    # ── Step 5: Check for changes ──
+    - id: check-changes
+      if: steps.should-run.outputs.run == 'true'
+      shell: bash
+      run: |
+        CHANGED=$(git diff --name-only 2>/dev/null | wc -l | tr -d ' ')
+        UNTRACKED=$(git ls-files --others --exclude-standard 2>/dev/null | wc -l | tr -d ' ')
+        TOTAL=$((CHANGED + UNTRACKED))
+
+        if [ "$TOTAL" -gt 0 ]; then
+          echo "context-updated=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::auto-context: ${TOTAL} file(s) changed"
+          echo "::group::Changed files"
+          git diff --name-only 2>/dev/null || true
+          git ls-files --others --exclude-standard 2>/dev/null || true
+          echo "::endgroup::"
+        else
+          echo "context-updated=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::auto-context: no changes detected"
+        fi
+
+    # ── Step 6: Apply changes based on mode ──
+    - id: apply
+      if: steps.should-run.outputs.run == 'true' && steps.check-changes.outputs.context-updated == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+
+        TRIGGER="${{ steps.detect.outputs.trigger }}"
+        MAIN="${{ steps.detect.outputs.main-branch }}"
+        PR_NUMBER="${{ steps.detect.outputs.pr-number }}"
+        HEAD_BRANCH="${{ steps.detect.outputs.head-branch }}"
+        PR_MODE="${{ inputs.pr-mode }}"
+        MAIN_MODE="${{ inputs.main-mode }}"
+        BRANCH_SUFFIX="$(date +%s)-$(git rev-parse --short HEAD)"
+        COMMIT_MSG="docs: update context files [auto-context]"
+
+        if [ "$TRIGGER" = "pr" ]; then MODE="$PR_MODE"; else MODE="$MAIN_MODE"; fi
+
+        git config user.name "auto-context[bot]"
+        git config user.email "auto-context[bot]@users.noreply.github.com"
+
+        DIFF_BODY=""
+        NEW_FILES=""
+        if [ "$TRIGGER" = "pr" ] && [ "$MODE" != "auto-commit" ] && [ "$MODE" != "auto-pr" ]; then
+          DIFF_BODY=$(git diff 2>/dev/null || echo "")
+          NEW_FILES=$(git ls-files --others --exclude-standard 2>/dev/null || echo "")
+        fi
+
+        push_with_retry() {
+          local branch="$1"
+          for attempt in 1 2 3; do
+            if git push; then
+              echo "::notice::auto-context: pushed context update to ${branch}"
+              return 0
+            fi
+            echo "::warning::auto-context: push failed (attempt ${attempt}/3)"
+            git rebase --abort 2>/dev/null || true
+            git pull --rebase origin "$branch" 2>/dev/null || true
+            sleep $((attempt * 2))
+          done
+          echo "::error::auto-context: failed to push to ${branch} after 3 attempts"
+          return 1
+        }
+
+        commit_to_branch() {
+          local branch="$1"
+          local msg="${2:-$COMMIT_MSG}"
+          git checkout -b "$branch"
+          git commit -m "$msg"
+          git push -u origin "$branch"
+        }
+
+        git add -A
+
+        case "$TRIGGER:$MODE" in
+          pr:auto-commit)
+            git commit -m "$COMMIT_MSG"
+            push_with_retry "$HEAD_BRANCH"
+
+            COMMENT_BODY="## Auto-Context Update"$'\n\n'"Context files were updated automatically in commit \`$(git rev-parse --short HEAD)\`."$'\n\n'
+            COMMENT_BODY+="<details><summary>Changed files</summary>"$'\n\n'
+            COMMENT_BODY+='```'$'\n'"$(git diff --name-only HEAD~1..HEAD 2>/dev/null || echo '(see commit)')"$'\n''```'$'\n'
+            COMMENT_BODY+="</details>"
+
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$COMMENT_BODY"
+            echo "pr-url=" >> "$GITHUB_OUTPUT"
+            ;;
+
+          pr:auto-pr)
+            UPDATE_BRANCH="auto-context/pr-${PR_NUMBER}-${BRANCH_SUFFIX}"
+            commit_to_branch "$UPDATE_BRANCH"
+
+            NEW_PR_URL=$(gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "$HEAD_BRANCH" \
+              --head "$UPDATE_BRANCH" \
+              --title "auto-context: update context files for PR #${PR_NUMBER}" \
+              --label "auto-context" \
+              --body "Automated context file updates for PR #${PR_NUMBER}." 2>&1)
+
+            COMMENT_BODY="## Auto-Context Update"$'\n\n'"Context files need updating. A PR with the proposed changes has been created:"$'\n\n'"${NEW_PR_URL}"
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$COMMENT_BODY"
+            echo "pr-url=${NEW_PR_URL}" >> "$GITHUB_OUTPUT"
+            ;;
+
+          pr:*)
+            UPDATE_BRANCH="auto-context/pr-${PR_NUMBER}-${BRANCH_SUFFIX}"
+            commit_to_branch "$UPDATE_BRANCH"
+
+            COMPARE_URL="https://github.com/${GITHUB_REPOSITORY}/compare/${HEAD_BRANCH}...${UPDATE_BRANCH}?expand=1&title=auto-context%3A+update+context+files&labels=auto-context"
+
+            COMMENT_BODY="## Auto-Context Update"$'\n\n'"Context files may need updating based on recent changes."$'\n\n'
+            COMMENT_BODY+="[**Create a PR to merge these updates into this branch**](${COMPARE_URL})"$'\n\n'
+            COMMENT_BODY+="<details><summary>Proposed changes</summary>"$'\n\n'
+            if [ -n "$DIFF_BODY" ]; then
+              COMMENT_BODY+='```diff'$'\n'"${DIFF_BODY}"$'\n''```'$'\n'
+            fi
+            if [ -n "$NEW_FILES" ]; then
+              COMMENT_BODY+=$'\n'"**New files:**"$'\n''```'$'\n'"${NEW_FILES}"$'\n''```'$'\n'
+            fi
+            COMMENT_BODY+="</details>"
+
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$COMMENT_BODY"
+            echo "pr-url=" >> "$GITHUB_OUTPUT"
+            ;;
+
+          main:direct-commit)
+            git commit -m "$COMMIT_MSG"
+            push_with_retry "$MAIN"
+            echo "pr-url=" >> "$GITHUB_OUTPUT"
+            ;;
+
+          main:*)
+            UPDATE_BRANCH="auto-context/main-${BRANCH_SUFFIX}"
+            commit_to_branch "$UPDATE_BRANCH"
+
+            NEW_PR_URL=$(gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "$MAIN" \
+              --head "$UPDATE_BRANCH" \
+              --title "auto-context: update context files" \
+              --label "auto-context" \
+              --body "Automated context file updates triggered by a push to \`${MAIN}\`." 2>&1)
+
+            echo "pr-url=${NEW_PR_URL}" >> "$GITHUB_OUTPUT"
+            echo "::notice::auto-context: created PR ${NEW_PR_URL}"
+            ;;
+        esac
