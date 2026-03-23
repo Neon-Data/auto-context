@@ -22,9 +22,9 @@ Auto-Context runs on PR events and main branch pushes. It uses Claude to analyze
 
 | Mode | Behavior |
 |------|----------|
-| `comment` (default) | Posts a PR comment showing proposed changes with a link to create a merge PR |
+| `comment` | Posts a PR comment showing proposed changes with a link to create a merge PR |
 | `auto-pr` | Creates a PR targeting the current PR branch with the proposed changes |
-| `auto-commit` | Commits the changes directly to the PR branch |
+| `auto-commit` (default) | Commits the changes directly to the PR branch |
 
 ### Main branch modes
 
@@ -129,7 +129,7 @@ jobs:
 | `github-token` | No | `${{ github.token }}` | GitHub token for PR comments and creating PRs |
 | `model` | No | `claude-opus-4-6` | Claude model to use |
 | `context-files` | No | `""` (auto-discover) | Comma-separated context file names/globs. When empty, Claude discovers them automatically |
-| `pr-mode` | No | `comment` | How to apply changes on PRs: `comment`, `auto-pr`, or `auto-commit` |
+| `pr-mode` | No | `auto-commit` | How to apply changes on PRs: `comment`, `auto-pr`, or `auto-commit` |
 | `main-mode` | No | `pr` | How to apply changes on main pushes: `pr` or `direct-commit` |
 | `init` | No | `true` | Create a minimal `CLAUDE.md` if no context files exist yet |
 | `debug` | No | `false` | Show full Claude output in the GitHub Actions logs |
@@ -197,15 +197,15 @@ To disable this behavior:
 
 ## Examples
 
-### PR with auto-commit
+### PR with comment mode
 
-Automatically commit context file updates to the PR branch:
+Post a comment with proposed changes instead of committing directly:
 
 ```yaml
 - uses: Neon-Data/auto-context@beta
   with:
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-    pr-mode: auto-commit
+    pr-mode: comment
 ```
 
 ### PR with auto-PR

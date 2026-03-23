@@ -25,7 +25,7 @@ inputs:
   pr-mode:
     description: "How to apply changes on PRs: comment, auto-pr, or auto-commit"
     required: false
-    default: "comment"
+    default: "auto-commit"
   main-mode:
     description: "How to apply changes on main branch pushes: pr or direct-commit"
     required: false

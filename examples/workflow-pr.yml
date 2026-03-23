@@ -25,7 +25,7 @@ jobs:
       - uses: Neon-Data/auto-context@beta
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # pr-mode: comment        # default — posts a comment with a link to create a PR
+          # pr-mode: auto-commit    # default — commits directly to the PR branch
+          # pr-mode: comment        # posts a comment with a link to create a PR
           # pr-mode: auto-pr        # creates a PR targeting the current PR branch
-          # pr-mode: auto-commit    # commits directly to the PR branch
           # debug: true             # show full Claude output in action logs

@@ -53,7 +53,7 @@ This separation ensures Claude can never modify the remote repository directly. 
 
 | Trigger | Modes | Default |
 |---------|-------|---------|
-| PR (`pull_request`) | `comment`, `auto-pr`, `auto-commit` | `comment` |
+| PR (`pull_request`) | `comment`, `auto-pr`, `auto-commit` | `auto-commit` |
 | Main branch (`push`) | `pr`, `direct-commit` | `pr` |
 
 ### Loop prevention layers
@@ -85,7 +85,7 @@ The prompt at `prompts/update-context.md` uses these `envsubst` variables:
 | `github-token` | No | `${{ github.token }}` |
 | `model` | No | `claude-opus-4-6` |
 | `context-files` | No | `""` (auto-discover) |
-| `pr-mode` | No | `comment` |
+| `pr-mode` | No | `auto-commit` |
 | `main-mode` | No | `pr` |
 | `init` | No | `true` |
 | `debug` | No | `false` |

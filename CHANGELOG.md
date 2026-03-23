@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Composite GitHub Action for automatically updating AI-agent context files
-- PR trigger modes: `comment` (default), `auto-pr`, `auto-commit`
+- PR trigger modes: `auto-commit` (default), `comment`, `auto-pr`
 - Main branch trigger modes: `pr` (default), `direct-commit`
 - Auto-discovery of context files (`CLAUDE.md`, `AGENT.md`, `AGENTS.md`, `.cursorrules`)
 - Init mode: bootstrap a `CLAUDE.md` from scratch when no context files exist
