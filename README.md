@@ -1,6 +1,5 @@
 # Auto-Context
 
-[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Auto--Context-purple?logo=github)](https://github.com/marketplace/actions/auto-context)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Keep your AI-agent context files (CLAUDE.md, AGENT.md, etc.) in sync with your codebase — automatically.
