@@ -277,6 +277,10 @@ runs:
 
         git add -A
 
+        # Ensure the auto-context label exists (gh pr create --label fails if it doesn't)
+        gh label create "auto-context" --repo "$GITHUB_REPOSITORY" \
+          --color "7B61FF" --description "Automated context file updates" 2>/dev/null || true
+
         case "$TRIGGER:$MODE" in
           pr:auto-commit)
             git commit -m "$COMMIT_MSG"
