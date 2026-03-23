@@ -19,6 +19,8 @@ Published on GitHub Marketplace as `Neon-Data/auto-context`.
 |------|---------|
 | `action.yml` | Main composite action definition — all action logic lives here |
 | `prompts/update-context.md` | Prompt template sent to Claude (uses `${VAR}` placeholders) |
+| `.github/workflows/workflow-pr.yml` | Dogfood workflow — runs auto-context on PRs to this repo |
+| `.github/workflows/workflow-main.yml` | Dogfood workflow — runs auto-context on pushes to main |
 | `examples/workflow-pr.yml` | Example consumer workflow for PR triggers |
 | `examples/workflow-main.yml` | Example consumer workflow for main-branch push triggers |
 | `README.md` | User-facing documentation |
@@ -40,7 +42,7 @@ This separation ensures Claude can never modify the remote repository directly. 
 
 ### Action pipeline (6 steps in `action.yml`)
 
-1. **detect** — Determines trigger type (PR vs push), extracts PR number, head branch, before SHA
+1. **detect** — Determines trigger type (PR vs push), extracts PR number, head branch, before SHA (validates SHA exists in repo; falls back to `HEAD~1` on force pushes)
 2. **should-run** — Loop prevention: skips if commit message contains `[auto-context]` or PR has `auto-context` label
 3. **gather** — Computes diff range, lists changed files, renders the prompt template via `envsubst`, writes prompt to `$RUNNER_TEMP/auto-context-prompt.txt`
 4. **run-claude** — Installs `@anthropic-ai/claude-code` CLI and runs `claude --bare -p` with the rendered prompt piped via stdin; Claude reads diffs dynamically using `git diff`, `git log`, `git show`, `git ls-files`, `git blame`
