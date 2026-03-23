@@ -25,7 +25,7 @@ Published on GitHub Marketplace as `Neon-Data/auto-context`.
 | `examples/workflow-main.yml` | Example consumer workflow for main-branch push triggers |
 | `README.md` | User-facing documentation |
 | `LICENSE` | MIT license |
-| `.gitignore` | Ignores node_modules, .DS_Store, swap files |
+| `.gitignore` | Ignores `node_modules/`, `.DS_Store`, swap files, `TODOS.md` |
 
 There is no `src/`, `dist/`, or build output. The entire action is a single `action.yml` with inline bash.
 
