@@ -73,6 +73,12 @@ runs:
           PR_NUMBER=""
           HEAD_BRANCH=""
           BEFORE_SHA="${{ github.event.before }}"
+          if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            if ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+              echo "::warning::auto-context: before SHA ${BEFORE_SHA} not found in repo (force push?), falling back to HEAD~1"
+              BEFORE_SHA=""
+            fi
+          fi
           if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
             BEFORE_SHA=$(git rev-parse HEAD~1 2>/dev/null || git rev-list --max-parents=0 HEAD | head -1)
           fi
@@ -159,30 +165,40 @@ runs:
         PROMPT_TEMPLATE="${{ github.action_path }}/prompts/update-context.md"
         FINAL_PROMPT=$(envsubst "$ENVSUBST_VARS" < "$PROMPT_TEMPLATE")
 
-        {
-          echo 'prompt<<PROMPT_DELIM_EOF'
-          echo "$FINAL_PROMPT"
-          echo 'PROMPT_DELIM_EOF'
-        } >> "$GITHUB_OUTPUT"
+        echo "$FINAL_PROMPT" > "$RUNNER_TEMP/auto-context-prompt.txt"
 
         echo "::group::auto-context prompt preview"
         echo "$FINAL_PROMPT" | head -30
         echo "... (truncated)"
         echo "::endgroup::"
 
-    # ── Step 4: Run Claude via claude-code-action ──
+    # ── Step 4: Run Claude via CLI ──
     - id: run-claude
       if: steps.should-run.outputs.run == 'true'
-      uses: anthropics/claude-code-action@v1
-      with:
-        anthropic_api_key: ${{ inputs.anthropic-api-key }}
-        github_token: ${{ inputs.github-token }}
-        prompt: ${{ steps.gather.outputs.prompt }}
-        show_full_output: ${{ inputs.debug == 'true' }}
-        claude_args: >-
-          --model ${{ inputs.model }}
-          --max-turns 25
-          --allowedTools "Bash(git diff*),Bash(git log*),Bash(git show*),Bash(git ls-files*),Bash(git blame*)"
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
+        ANTHROPIC_CUSTOM_HEADERS: ${{ env.ANTHROPIC_CUSTOM_HEADERS }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_DEBUG: ${{ inputs.debug }}
+      run: |
+        set -euo pipefail
+        npm install -g @anthropic-ai/claude-code@2.1.81
+
+        VERBOSE_FLAG=""
+        if [ "$INPUT_DEBUG" = "true" ]; then
+          VERBOSE_FLAG="--verbose"
+        fi
+
+        cat "$RUNNER_TEMP/auto-context-prompt.txt" | claude --bare $VERBOSE_FLAG \
+          -p "Follow the instructions provided via stdin." \
+          --model "$INPUT_MODEL" \
+          --max-turns 25 \
+          --allowedTools "Read" "Write" "Edit" \
+            "Bash(git diff*)" "Bash(git log*)" "Bash(git show*)" \
+            "Bash(git ls-files*)" "Bash(git blame*)" \
+          2>&1 | tee "$RUNNER_TEMP/claude-output.txt"
 
     # ── Step 5: Check for changes ──
     - id: check-changes

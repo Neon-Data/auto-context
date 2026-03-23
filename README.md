@@ -310,7 +310,7 @@ Auto-Context will automatically split it into a `context/` folder with separate 
 If using `main-mode: direct-commit`, the bot needs push access. Either allow the GitHub Actions bot to bypass protection rules, or use a PAT with admin access. The default `main-mode: pr` avoids this issue by creating a PR instead.
 
 **Can I use it with self-hosted runners?**
-Yes. The action uses `anthropics/claude-code-action@v1` which handles Claude Code installation. Ensure your runner has Node.js 18+ and network access to the Anthropic API.
+Yes. The action installs the `@anthropic-ai/claude-code` CLI via npm at runtime. Ensure your runner has Node.js 18+, npm, and network access to the Anthropic API.
 
 ---
 

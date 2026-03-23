@@ -9,7 +9,7 @@ Published on GitHub Marketplace as `Neon-Data/auto-context`.
 ## Tech stack
 
 - **Runtime:** GitHub Actions composite action (pure bash, no Node.js/Docker build step)
-- **AI:** Anthropic Claude via `anthropics/claude-code-action@v1`
+- **AI:** Anthropic Claude via `@anthropic-ai/claude-code` CLI (pinned version)
 - **Prompt templating:** `envsubst` (shell-native variable substitution)
 - **License:** MIT
 
@@ -42,8 +42,8 @@ This separation ensures Claude can never modify the remote repository directly. 
 
 1. **detect** — Determines trigger type (PR vs push), extracts PR number, head branch, before SHA
 2. **should-run** — Loop prevention: skips if commit message contains `[auto-context]` or PR has `auto-context` label
-3. **gather** — Computes diff range, lists changed files, renders the prompt template via `envsubst`
-4. **run-claude** — Invokes `anthropics/claude-code-action@v1` with the rendered prompt; Claude reads diffs dynamically using `git diff`, `git log`, `git show`, `git ls-files`, `git blame`
+3. **gather** — Computes diff range, lists changed files, renders the prompt template via `envsubst`, writes prompt to `$RUNNER_TEMP/auto-context-prompt.txt`
+4. **run-claude** — Installs `@anthropic-ai/claude-code` CLI and runs `claude --bare -p` with the rendered prompt piped via stdin; Claude reads diffs dynamically using `git diff`, `git log`, `git show`, `git ls-files`, `git blame`
 5. **check-changes** — Checks if Claude modified any files
 6. **apply** — Commits and pushes/PRs/comments based on mode settings
 
