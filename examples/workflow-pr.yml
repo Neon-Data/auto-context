@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
 
-      - uses: Neon-Data/auto-context@beta
+      - uses: Neon-Data/auto-context@v1
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           # pr-mode: auto-commit    # default — commits directly to the PR branch

@@ -79,7 +79,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
 
-      - uses: Neon-Data/auto-context@beta
+      - uses: Neon-Data/auto-context@v1
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
@@ -114,7 +114,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: Neon-Data/auto-context@beta
+      - uses: Neon-Data/auto-context@v1
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
@@ -170,7 +170,7 @@ By default, Auto-Context discovers context files automatically. It looks for:
 To restrict which files are checked, use the `context-files` input:
 
 ```yaml
-- uses: Neon-Data/auto-context@beta
+- uses: Neon-Data/auto-context@v1
   with:
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     context-files: "CLAUDE.md,src/api/CLAUDE.md"
@@ -187,7 +187,7 @@ This means you can add Auto-Context to any repo and get a useful context file on
 To disable this behavior:
 
 ```yaml
-- uses: Neon-Data/auto-context@beta
+- uses: Neon-Data/auto-context@v1
   with:
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     init: false
@@ -202,7 +202,7 @@ To disable this behavior:
 Post a comment with proposed changes instead of committing directly:
 
 ```yaml
-- uses: Neon-Data/auto-context@beta
+- uses: Neon-Data/auto-context@v1
   with:
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     pr-mode: comment
@@ -213,7 +213,7 @@ Post a comment with proposed changes instead of committing directly:
 Create a separate PR with the context updates targeting the PR branch:
 
 ```yaml
-- uses: Neon-Data/auto-context@beta
+- uses: Neon-Data/auto-context@v1
   with:
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     pr-mode: auto-pr
@@ -224,7 +224,7 @@ Create a separate PR with the context updates targeting the PR branch:
 Push context updates directly to main:
 
 ```yaml
-- uses: Neon-Data/auto-context@beta
+- uses: Neon-Data/auto-context@v1
   with:
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     main-mode: direct-commit
@@ -233,7 +233,7 @@ Push context updates directly to main:
 ### Using a different model
 
 ```yaml
-- uses: Neon-Data/auto-context@beta
+- uses: Neon-Data/auto-context@v1
   with:
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     model: claude-sonnet-4-6

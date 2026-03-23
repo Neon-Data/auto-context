@@ -25,7 +25,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: Neon-Data/auto-context@beta
+      - uses: Neon-Data/auto-context@v1
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           # main-mode: pr             # default — opens a PR with proposed changes
